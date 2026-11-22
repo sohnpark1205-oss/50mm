@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>50mm 감성 보정</title>
+<meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="50mm">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-180.png">
+<link rel="manifest" href="manifest.json">
+<style>
+/* VOICE: 현대 독일 카메라의 메뉴 화면처럼 — 검정, 흰 글씨, 가는 선, 빨강은 아주 조금. 꾸밈 없이 정확하게.
+   IDEA: 카메라 뒷면 화면. 사진이 화면 대부분을 차지하고 조작부는 아래 한 줄로 얌전히.
+   PICTURE: 보정 중인 사진이 늘 위에 고정되어 슬라이더를 움직이는 동안 계속 보인다.
+   COLOUR and TYPE: 순검정 #000, 흰색, 회색 두 단계, 빨강 #d4002a 한 점. 폰 기본 글꼴(SF/애플 산돌고딕, 안드로이드 Noto).
+   LAYOUT: 화면 높이에 고정 — 상단 바 / 사진(남는 공간 전부) / 탭 / 조절 패널(자체 스크롤). 넓은 화면에서는 사진 왼쪽, 조절 오른쪽. */
+:root{color-scheme:dark;--bg:#000;--panel:#0b0b0b;--line:#222;--line2:#333;--ink:#fff;--mute:#8a8a8a;--dim:#5c5c5c;--acc:#d4002a}
+:root[data-theme=light],:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0;-webkit-tap-highlight-color:transparent}
+[hidden]{display:none!important}
+html,body{height:100%;margin:0;background:var(--bg)}
+body{color:var(--ink);font:400 15px/1.45 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;letter-spacing:-.01em;overflow:hidden}
+.app{height:100vh;height:100dvh;display:grid;grid-template-rows:auto minmax(0,1fr) auto;max-width:1280px;margin:0 auto;
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left)}
+header{display:flex;align-items:center;gap:8px;padding:8px 12px 8px 16px;min-height:56px}
+header .grow{flex:1;display:flex;align-items:baseline;gap:10px}
+header h1{font-size:17px;font-weight:600;margin:0;letter-spacing:-.02em}
+header p{margin:0;font-size:12px;color:var(--mute);font-variant-numeric:tabular-nums}
+.btn,.chip,.tab,.cmp,.link{touch-action:manipulation}
+.btn{appearance:none;border:0;background:transparent;color:var(--ink);font:inherit;font-size:15px;min-height:40px;padding:0 14px;border-radius:999px;cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.btn.ghost{color:var(--mute)}
+.btn.primary{background:var(--ink);color:#000;font-weight:600}
+.btn:disabled{opacity:.3}
+.btn:focus-visible,.chip:focus-visible,.tab:focus-visible,.link:focus-visible,input:focus-visible{outline:1.5px solid var(--acc);outline-offset:2px}
+.stage{position:relative;background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
+.stage canvas{display:block}
+.empty{display:flex;flex-direction:column;align-items:center;gap:22px;padding:24px;text-align:center}
+.empty svg{width:min(70vw,300px);height:auto}
+.empty p{margin:0;color:var(--mute);font-size:13px;max-width:24em;text-wrap:balance}
+.empty .btn{min-height:48px;padding:0 28px;font-size:16px}
+.ring{position:absolute;border:1px solid rgba(255,255,255,.9);border-radius:50%;pointer-events:none;box-shadow:0 0 0 1px rgba(0,0,0,.3);transition:opacity .25s;opacity:0}
+.ring.band{border-radius:0;border-left:0;border-right:0}
+.ring.on{opacity:1}
+.dot{position:absolute;width:24px;height:24px;margin:-12px 0 0 -12px;pointer-events:none;opacity:0;transition:opacity .25s;border:1.5px solid #fff;border-radius:2px;
+  box-shadow:0 0 0 1px rgba(0,0,0,.35)}
+.dot.on{opacity:1}
+.cmp{position:absolute;right:12px;bottom:12px;min-height:34px;padding:0 14px;font:inherit;font-size:13px;border-radius:999px;background:rgba(0,0,0,.55);
+  border:0;color:#fff;touch-action:none;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+.cmp:active{background:rgba(255,255,255,.9);color:#000}
+.hint{position:absolute;top:12px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.6);color:#fff;font-size:13px;padding:7px 14px;border-radius:999px;
+  pointer-events:none;white-space:nowrap;opacity:0;transition:opacity .3s;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+.hint.on{opacity:1}
+.controls{background:var(--panel);border-top:1px solid var(--line);display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom)}
+.tabs{display:flex;padding:0 8px;border-bottom:1px solid var(--line)}
+.tab{flex:1;appearance:none;border:0;background:transparent;color:var(--dim);font:inherit;font-size:14px;font-weight:500;min-height:44px;cursor:pointer;position:relative}
+.tab::after{content:"";position:absolute;left:50%;bottom:-1px;width:16px;height:2px;margin-left:-8px;background:var(--acc);transform:scaleX(0);transition:transform .2s}
+.tab[aria-selected=true]{color:var(--ink)}
+.tab[aria-selected=true]::after{transform:scaleX(1)}
+.panels{height:clamp(176px,31dvh,260px);overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.panel{padding:12px 16px 14px;display:none}
+.panel.on{display:block}
+.head{display:flex;align-items:center;justify-content:space-between;margin:0 0 8px}
+.lbl{font-size:12px;color:var(--mute);margin:0}
+.link{appearance:none;border:0;background:none;color:var(--mute);font:inherit;font-size:12px;padding:6px 0 6px 10px;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.chips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin:0 -16px 10px;padding:0 16px}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;appearance:none;border:1px solid var(--line2);background:transparent;color:#ccc;font:inherit;font-size:14px;min-height:36px;padding:0 14px;border-radius:999px;cursor:pointer}
+.chip[aria-pressed=true]{background:var(--ink);border-color:var(--ink);color:#000;font-weight:600}
+.row{display:grid;grid-template-columns:4.8em minmax(0,1fr) 2.8em;align-items:center;gap:12px;min-height:42px}
+.row span{font-size:14px;color:#ddd;user-select:none;-webkit-user-select:none}
+.row output{font-size:13px;color:var(--mute);text-align:right;font-variant-numeric:tabular-nums}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:32px;background:transparent;margin:0;cursor:pointer}
+input[type=range]::-webkit-slider-runnable-track{height:2px;background:var(--line2);border-radius:2px}
+input[type=range]::-moz-range-track{height:2px;background:var(--line2);border-radius:2px}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;margin-top:-9px;border-radius:50%;background:#fff;border:0;box-shadow:0 1px 4px rgba(0,0,0,.6)}
+input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:#fff;border:0}
+.note{font-size:12px;color:var(--dim);margin:8px 0 0;line-height:1.55}
+.switch{display:flex;align-items:center;justify-content:space-between;min-height:44px;gap:12px;font-size:14px;color:#ddd;cursor:pointer}
+.switch input{appearance:none;-webkit-appearance:none;width:44px;height:26px;border-radius:999px;background:var(--line2);position:relative;cursor:pointer;flex:none;margin:0;transition:background .2s}
+.switch input::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:transform .2s}
+.switch input:checked{background:var(--acc)}
+.switch input:checked::after{transform:translateX(18px)}
+.dim{opacity:.35;pointer-events:none}
+.veil{position:fixed;inset:0;background:rgba(0,0,0,.85);display:none;align-items:center;justify-content:center;z-index:20;padding:16px}
+.veil.on{display:flex}
+.spin{width:30px;height:30px;border-radius:50%;border:2px solid rgba(255,255,255,.15);border-top-color:#fff;animation:sp .8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.busy{display:flex;flex-direction:column;align-items:center;gap:14px;color:#fff;font-size:14px}
+.sheet{background:#111;border-radius:16px;padding:16px;width:min(100%,520px);max-height:92vh;overflow:auto;display:flex;flex-direction:column;gap:12px}
+.sheet img{width:100%;height:auto;border-radius:4px;display:block;-webkit-touch-callout:default}
+.sheet h2{font-size:16px;font-weight:600;margin:0}
+.sheet .meta{font-size:12px;color:var(--mute);margin:0;font-variant-numeric:tabular-nums}
+.sheet .acts{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
+.sheet .acts .btn{min-height:48px;border-radius:12px}
+.sheet .acts .btn:not(.primary){background:#222}
+.toast{position:fixed;left:50%;top:calc(64px + env(safe-area-inset-top));transform:translateX(-50%);background:#fff;color:#000;font-size:14px;padding:10px 16px;border-radius:999px;
+  z-index:30;opacity:0;transition:opacity .25s;pointer-events:none;max-width:90vw;text-align:center}
+.toast.on{opacity:1}
+input[type=file]{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+@media (min-width:900px){
+  .app{grid-template-columns:minmax(0,1fr) 360px;grid-template-rows:auto minmax(0,1fr)}
+  header{grid-column:1/-1}
+  .controls{border-top:0;border-left:1px solid var(--line);grid-row:2;grid-column:2}
+  .panels{height:auto;flex:1}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation-duration:2s!important}}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="grow">
+      <h1>50mm</h1>
+      <p>F1.8 · 감성 보정</p>
+    </div>
+    <button class="btn ghost" id="newBtn" hidden>새 사진</button>
+    <button class="btn primary" id="saveBtn" disabled>저장</button>
+  </header>
+
+  <input type="file" id="file" accept="image/*">
+
+  <div class="stage" id="stage">
+    <div class="empty" id="empty">
+      <svg viewBox="0 0 300 200" aria-hidden="true">
+        <g fill="none" stroke="#fff" stroke-width="1.2">
+          <path d="M60 40h22M60 40v16M240 40h-22M240 40v16M60 160h22M60 160v-16M240 160h-22M240 160v-16"/>
+        </g>
+        <g fill="none" stroke="#fff" stroke-width=".8" opacity=".3">
+          <path d="M30 20h18M30 20v12M270 20h-18M270 20v12M30 180h18M30 180v-12M270 180h-18M270 180v-12"/>
+        </g>
+        <rect x="134" y="88" width="32" height="24" fill="none" stroke="#fff" stroke-width=".8" opacity=".5"/>
+      </svg>
+      <button class="btn primary" id="pickBtn">사진 선택</button>
+      <p>사진은 이 기기 안에서만 처리되고 어디에도 올라가지 않아요.</p>
+    </div>
+    <canvas id="cv" hidden></canvas>
+    <div class="ring" id="ring"></div>
+    <div class="dot" id="dot"></div>
+    <div class="hint" id="hint"></div>
+    <button class="cmp" id="cmp" hidden>꾹 눌러 원본</button>
+  </div>
+
+  <div class="controls">
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" data-tab="color" aria-selected="true">색감</button>
+      <button class="tab" role="tab" data-tab="crop" aria-selected="false">화각</button>
+      <button class="tab" role="tab" data-tab="blur" aria-selected="false">흐림</button>
+      <button class="tab" role="tab" data-tab="fx" aria-selected="false">효과</button>
+    </div>
+    <div class="panels">
+      <section class="panel on" id="p-color">
+        <div class="chips" id="presetChips"></div>
+        <div id="colorSliders"></div>
+        <div class="head" style="margin-top:6px"><p class="note" style="margin:0">이름을 두 번 누르면 그 항목만 처음 값으로</p><button class="link" id="resetColor">색감 초기화</button></div>
+      </section>
+
+      <section class="panel" id="p-crop">
+        <p class="lbl" style="margin-bottom:8px">화각</p>
+        <div class="chips" id="zoomChips"></div>
+        <p class="lbl" style="margin-bottom:8px">비율</p>
+        <div class="chips" id="ratioChips"></div>
+        <p class="note" id="sizeInfo"></p>
+        <p class="note">자른 상태에서는 사진을 끌어 위치를 옮길 수 있어요. 2x 렌즈로 찍은 사진은 자르지 않는 게 좋아요.</p>
+      </section>
+
+      <section class="panel" id="p-blur">
+        <label class="switch"><span>배경 흐림</span><input type="checkbox" id="blurOn"></label>
+        <div id="blurBox">
+          <div class="chips" id="shapeChips" style="margin-top:4px"></div>
+          <div id="blurSliders"></div>
+          <label class="switch"><span>빛망울 강조</span><input type="checkbox" id="glowOn"></label>
+        </div>
+        <p class="note">사진을 누르거나 끌어서 초점 위치를 정해요. 인물모드로 찍은 사진은 흐림을 끄고 쓰세요.</p>
+      </section>
+
+      <section class="panel" id="p-fx">
+        <div id="fxSliders"></div>
+        <p class="note">F1.8 개방에서 생기는 주변부 어두움(비네팅)과 약한 입자감이에요.</p>
+      </section>
+    </div>
+  </div>
+</div>
+
+<div class="veil" id="busy"><div class="busy"><div class="spin"></div><span>고화질로 만드는 중…</span></div></div>
+<div class="veil" id="sheetVeil">
+  <div class="sheet">
+    <h2>보정 완료</h2>
+    <img id="outImg" alt="보정한 사진">
+    <p class="meta" id="outMeta"></p>
+    <div class="acts">
+      <button class="btn" id="closeSheet">닫기</button>
+      <button class="btn primary" id="doSave">사진 저장</button>
+    </div>
+    <p class="meta">버튼이 안 되면 위 사진을 길게 눌러 저장하세요.</p>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+{
+const $ = s => document.querySelector(s);
+const clamp = (x, a, b) => x < a ? a : x > b ? b : x;
+const sstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+
+/* ---------- 설정 ---------- */
+const PRESETS = {
+  standard: {name:'스탠다드', warm:.15, tint:.10, con:.22, sat:1.06, hl:.5, lift:.012, skinH:-3, skinS:.04, skinL:.01, redS:.06, grnH:-7, grnS:-.04, bluS:.04, bluL:-.02},
+  portrait: {name:'인물', warm:.20, tint:.12, con:.12, sat:.97, hl:.7, lift:.02, skinH:-4, skinS:-.03, skinL:.035, redS:.02, grnH:-5, grnS:-.08, bluS:0, bluL:0},
+  landscape:{name:'풍경', warm:.08, tint:.05, con:.30, sat:1.16, hl:.45, lift:.008, skinH:-2, skinS:.02, skinL:0, redS:.08, grnH:-4, grnS:.10, bluS:.12, bluL:-.04},
+  neutral:  {name:'뉴트럴', warm:.05, tint:.04, con:.06, sat:.90, hl:.4, lift:.01, skinH:-1, skinS:0, skinL:0, redS:0, grnH:-2, grnS:-.04, bluS:0, bluL:0},
+  none:     {name:'원본 색', warm:0, tint:0, con:0, sat:1, hl:0, lift:0, skinH:0, skinS:0, skinL:0, redS:0, grnH:0, grnS:0, bluS:0, bluL:0}
+};
+const DEF = {preset:'standard', mix:1, ev:0, warm:0, con:0, sat:0, zoom:1, ratio:'orig', blur:false, shape:'circle', amount:.45, size:.35, glow:true,
+  fx:.5, fy:.45, vig:.35, grain:.15, cx:.5, cy:.5};
+const KEEP = ['preset','mix','ev','warm','con','sat','zoom','ratio','shape','amount','size','glow','vig','grain'];
+const S = Object.assign({}, DEF);
+try { const j = JSON.parse(localStorage.getItem('r5-50mm-v4') || 'null'); if (j) for (const k of KEEP) if (k in j) S[k] = j[k]; } catch (e) {}
+if (!PRESETS[S.preset]) S.preset = 'standard';
+const remember = () => { try { const o = {}; for (const k of KEEP) o[k] = S[k]; localStorage.setItem('r5-50mm-v4', JSON.stringify(o)); } catch (e) {} };
+
+const SLIDERS = {
+  colorSliders: [['mix','보정 강도',0,1,.01,v=>Math.round(v*100)+'%'], ['ev','밝기',-1,1,.05,v=>(v>0?'+':'')+v.toFixed(1)], ['warm','따뜻함',-1,1,.05,v=>Math.round(v*100)], ['con','대비',-1,1,.05,v=>Math.round(v*100)], ['sat','채도',-1,1,.05,v=>Math.round(v*100)]],
+  blurSliders:  [['amount','흐림 정도',0,1,.01,v=>Math.round(v*100)], ['size','선명 영역',.1,.9,.01,v=>Math.round(v*100)]],
+  fxSliders:    [['vig','비네팅',0,1,.01,v=>Math.round(v*100)], ['grain','입자감',0,1,.01,v=>Math.round(v*100)]]
+};
+const CHIPS = {
+  presetChips: ['preset', Object.keys(PRESETS).map(k => [k, PRESETS[k].name])],
+  zoomChips:   ['zoom', [[1,'자르지 않음'], [1.92,'50mm로 자르기 · 1.9배']]],
+  ratioChips:  ['ratio', [['orig','원본 비율'], ['32','3:2 카메라 비율']]],
+  shapeChips:  ['shape', [['circle','원형 · 인물'], ['band','가로 띠 · 음식·풍경']]]
+};
+
+/* ---------- 색 변환 (3D LUT) ---------- */
+const N = 33;
+const lin = x => x <= .04045 ? x / 12.92 : Math.pow((x + .055) / 1.055, 2.4);
+const gam = x => x <= .0031308 ? x * 12.92 : 1.055 * Math.pow(x, 1 / 2.4) - .055;
+function rgb2hsl(r, g, b) {
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2;
+  if (mx === mn) return [0, 0, l];
+  const d = mx - mn, s = l > .5 ? d / (2 - mx - mn) : d / (mx + mn);
+  let h = mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return [h * 60, s, l];
+}
+function hue2(p, q, t) { if (t < 0) t += 1; if (t > 1) t -= 1; return t < 1/6 ? p + (q - p) * 6 * t : t < .5 ? q : t < 2/3 ? p + (q - p) * (2/3 - t) * 6 : p; }
+function hsl2rgb(h, s, l) {
+  if (s <= 0) return [l, l, l];
+  h = ((h % 360) + 360) % 360 / 360;
+  const q = l < .5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q;
+  return [hue2(p, q, h + 1/3), hue2(p, q, h), hue2(p, q, h - 1/3)];
+}
+const hw = (h, c, w) => { const d = Math.abs(((h - c + 540) % 360) - 180); return d >= w ? 0 : .5 + .5 * Math.cos(Math.PI * d / w); };
+
+let LUT = null, lutKey = '';
+function getLUT() {
+  const key = [S.preset, S.mix, S.ev, S.warm, S.con, S.sat].join();
+  if (key === lutKey) return LUT;
+  const p = PRESETS[S.preset];
+  const warm = p.warm + S.warm * .6, tint = p.tint, ex = Math.pow(2, S.ev);
+  const wr = 1 + .09 * warm, wg = 1 - .04 * tint, wb = 1 - .13 * warm, n = .2126 * wr + .7152 * wg + .0722 * wb;
+  const gr = ex * wr / n, gg = ex * wg / n, gb = ex * wb / n;
+  const k = 1 + Math.max(-.45, p.con + S.con * .4), sat = p.sat * (1 + S.sat * .6), lift = p.lift, hl = p.hl;
+  const tone = x => {
+    if (x > .85) x = .85 + .15 * (1 - Math.exp(-(x - .85) / .15));
+    x = lift + (1 - lift) * x;
+    x = x < .5 ? .5 * Math.pow(2 * x, k) : 1 - .5 * Math.pow(2 - 2 * x, k);
+    if (x > .75) { const u = x - .75; x = .75 + u * (1 - hl * u); }
+    return x;
+  };
+  const L = new Float32Array(N * N * N * 3);
+  let i = 0;
+  for (let b = 0; b < N; b++) for (let g = 0; g < N; g++) for (let r = 0; r < N; r++) {
+    let R = tone(gam(lin(r / (N - 1)) * gr)), G = tone(gam(lin(g / (N - 1)) * gg)), B = tone(gam(lin(b / (N - 1)) * gb));
+    let [h, s, l] = rgb2hsl(R, G, B);
+    if (s > 0) {
+      const sw = Math.min(1, s * 3);
+      const wS = hw(h, 25, 25) * sw, wR = hw(h, 0, 18) * sw, wG = hw(h, 105, 45) * sw, wB = hw(h, 215, 35) * sw;
+      h += p.skinH * wS + p.grnH * wG;
+      s *= (1 + p.skinS * wS) * (1 + p.redS * wR) * (1 + p.grnS * wG) * (1 + p.bluS * wB);
+      l += p.skinL * wS * (1 - l) + p.bluL * wB * l;
+      [R, G, B] = hsl2rgb(h, clamp(s, 0, 1), clamp(l, 0, 1));
+    }
+    const Y = .2126 * R + .7152 * G + .0722 * B;
+    const mx = S.mix, o0 = r / (N - 1), o1 = g / (N - 1), o2 = b / (N - 1);
+    L[i++] = (o0 + (clamp(Y + (R - Y) * sat, 0, 1) - o0) * mx) * 255;
+    L[i++] = (o1 + (clamp(Y + (G - Y) * sat, 0, 1) - o1) * mx) * 255;
+    L[i++] = (o2 + (clamp(Y + (B - Y) * sat, 0, 1) - o2) * mx) * 255;
+  }
+  LUT = L; lutKey = key; return L;
+}
+function applyLUT(d, L) {
+  const n1 = N - 1, sc = n1 / 255, sg = N * 3, sb = N * N * 3;
+  for (let i = 0; i < d.length; i += 4) {
+    const fr = d[i] * sc, fg = d[i + 1] * sc, fb = d[i + 2] * sc;
+    let r0 = fr | 0, g0 = fg | 0, b0 = fb | 0;
+    if (r0 >= n1) r0 = n1 - 1; if (g0 >= n1) g0 = n1 - 1; if (b0 >= n1) b0 = n1 - 1;
+    const dr = fr - r0, dg = fg - g0, db = fb - b0, o = b0 * sb + g0 * sg + r0 * 3;
+    for (let c = 0; c < 3; c++) {
+      const j = o + c;
+      const c00 = L[j] + (L[j + 3] - L[j]) * dr, c10 = L[j + sg] + (L[j + sg + 3] - L[j + sg]) * dr;
+      const c01 = L[j + sb] + (L[j + sb + 3] - L[j + sb]) * dr, c11 = L[j + sb + sg] + (L[j + sb + sg + 3] - L[j + sb + sg]) * dr;
+      const c0 = c00 + (c10 - c00) * dg, c1 = c01 + (c11 - c01) * dg;
+      d[i + c] = c0 + (c1 - c0) * db;
+    }
+  }
+}
+
+/* ---------- 흐림 · 비네팅 · 입자 ---------- */
+function downsample(d, w, h, f, sw, sh) {
+  const a = new Float32Array(sw * sh * 3), n = new Float32Array(sw * sh);
+  for (let y = 0; y < h; y++) {
+    const ro = ((y / f) | 0) * sw;
+    for (let x = 0; x < w; x++) {
+      const j = ro + ((x / f) | 0), i = (y * w + x) * 4;
+      a[j * 3] += d[i]; a[j * 3 + 1] += d[i + 1]; a[j * 3 + 2] += d[i + 2]; n[j]++;
+    }
+  }
+  for (let j = 0; j < n.length; j++) { const q = 1 / n[j]; a[j * 3] *= q; a[j * 3 + 1] *= q; a[j * 3 + 2] *= q; }
+  return a;
+}
+function pass(s, t, len, lines, step, lstep, r) {
+  const iv = 1 / (2 * r + 1), last = len - 1;
+  for (let ln = 0; ln < lines; ln++) {
+    const o = ln * lstep;
+    for (let c = 0; c < 3; c++) {
+      let acc = 0;
+      for (let k = -r; k <= r; k++) acc += s[o + clamp(k, 0, last) * step + c];
+      for (let x = 0; x < len; x++) {
+        t[o + x * step + c] = acc * iv;
+        const xa = x + r + 1, xr = x - r;
+        acc += s[o + (xa > last ? last : xa) * step + c] - s[o + (xr < 0 ? 0 : xr) * step + c];
+      }
+    }
+  }
+}
+function blur3(src, w, h, r) {
+  let a = Float32Array.from(src), b = new Float32Array(src.length);
+  for (let k = 0; k < 3; k++) { pass(a, b, w, h, 3, w * 3, r); pass(b, a, h, w, w * 3, 3, r); }
+  return a;
+}
+function finish(d, w, h, smallLong) {
+  const doBlur = S.blur && S.amount > 0, vig = S.vig, gr = S.grain * 16;
+  if (!doBlur && vig <= 0 && gr <= 0) return;
+  let LY = null, f = 1, sw = 0, sh = 0;
+  if (doBlur) {
+    f = Math.max(1, Math.ceil(Math.max(w, h) / smallLong));
+    sw = Math.ceil(w / f); sh = Math.ceil(h / f);
+    const base = downsample(d, w, h, f, sw, sh);
+    if (S.glow) for (let j = 0; j < base.length; j += 3) {
+      const Y = .2126 * base[j] + .7152 * base[j + 1] + .0722 * base[j + 2];
+      if (Y > 185) { const g = 1 + Math.pow((Y - 185) / 70, 2) * 1.3; base[j] *= g; base[j + 1] *= g; base[j + 2] *= g; }
+    }
+    // 흐림 4단계: 초점에서 멀어질수록 조금씩 더 흐려짐
+    const L = Math.max(sw, sh), rMax = L * .017 * Math.pow(S.amount, 1.3);
+    LY = [null, .12, .3, .58, 1].map(q => q && blur3(base, sw, sh, Math.max(1, Math.round(rMax * q))));
+  }
+  const m = Math.min(w, h), band = S.shape === 'band';
+  const inner = band ? S.size * .3 : S.size * .45, outer = inner + .25 + S.size * (band ? .7 : .8);
+  const cs = Math.max(1, Math.max(w, h) / 1300), ics = 1 / cs;
+  const hsh = (ix, iy) => { let q = Math.imul(ix, 374761393) + Math.imul(iy, 668265263) | 0; q = Math.imul(q ^ (q >>> 13), 1274126177); return ((q ^ (q >>> 16)) >>> 0) / 4294967296 - .5; };
+  for (let y = 0; y < h; y++) {
+    const v = (y + .5) / h, vy = v - .5;
+    const dyF = band ? Math.abs(v - S.fy) * h / m : (v - S.fy) * h / m / 1.25;
+    const syf = (y + .5) / f - .5;
+    let y0 = Math.floor(syf), wy = syf - y0; if (y0 < 0) { y0 = 0; wy = 0; } if (y0 >= sh - 1) { y0 = Math.max(0, sh - 2); wy = sh > 1 ? 1 : 0; }
+    const ra = y0 * sw, rb = Math.min(y0 + 1, sh - 1) * sw;
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4, u = (x + .5) / w;
+      let r = d[i], g = d[i + 1], b = d[i + 2];
+      if (doBlur) {
+        let t;
+        if (band) t = sstep(inner, outer, dyF);
+        else { const dx = (u - S.fx) * w / m; t = sstep(inner, outer, Math.sqrt(dx * dx + dyF * dyF)); }
+        t = t * Math.sqrt(t);
+        if (t > .002) {
+          const sxf = (x + .5) / f - .5;
+          let x0 = Math.floor(sxf), wx = sxf - x0; if (x0 < 0) { x0 = 0; wx = 0; } if (x0 >= sw - 1) { x0 = Math.max(0, sw - 2); wx = sw > 1 ? 1 : 0; }
+          const x1 = Math.min(x0 + 1, sw - 1);
+          const a00 = (ra + x0) * 3, a10 = (ra + x1) * 3, a01 = (rb + x0) * 3, a11 = (rb + x1) * 3;
+          const w00 = (1 - wx) * (1 - wy), w10 = wx * (1 - wy), w01 = (1 - wx) * wy, w11 = wx * wy;
+          const seg = Math.min(t * 4, 3.9999), n = seg | 0, k = seg - n, A = LY[n], B = LY[n + 1];
+          let r1 = r, g1 = g, b1 = b;
+          if (A) {
+            r1 = A[a00] * w00 + A[a10] * w10 + A[a01] * w01 + A[a11] * w11;
+            g1 = A[a00 + 1] * w00 + A[a10 + 1] * w10 + A[a01 + 1] * w01 + A[a11 + 1] * w11;
+            b1 = A[a00 + 2] * w00 + A[a10 + 2] * w10 + A[a01 + 2] * w01 + A[a11 + 2] * w11;
+          }
+          const r2 = B[a00] * w00 + B[a10] * w10 + B[a01] * w01 + B[a11] * w11;
+          const g2 = B[a00 + 1] * w00 + B[a10 + 1] * w10 + B[a01 + 1] * w01 + B[a11 + 1] * w11;
+          const b2 = B[a00 + 2] * w00 + B[a10 + 2] * w10 + B[a01 + 2] * w01 + B[a11 + 2] * w11;
+          r = r1 + (r2 - r1) * k; g = g1 + (g2 - g1) * k; b = b1 + (b2 - b1) * k;
+        }
+      }
+      if (vig > 0) {
+        const ux = u - .5, rr = (ux * ux + vy * vy) * 2, mul = 1 - vig * .6 * rr * (.4 + .6 * rr);
+        r *= mul; g *= mul; b *= mul;
+      }
+      if (gr > 0) {
+        const gx = x * ics, gy = y * ics, ix = gx | 0, iy = gy | 0, fx = gx - ix, fy = gy - iy;
+        const nA = hsh(ix, iy) + (hsh(ix + 1, iy) - hsh(ix, iy)) * fx, nB = hsh(ix, iy + 1) + (hsh(ix + 1, iy + 1) - hsh(ix, iy + 1)) * fx;
+        const Y = .2126 * r + .7152 * g + .0722 * b, z = (nA + (nB - nA) * fy) * 2.4 * gr * (1 - Math.min(1, Math.abs(Y - 128) / 170));
+        r += z; g += z; b += z;
+      }
+      d[i] = r; d[i + 1] = g; d[i + 2] = b;
+    }
+  }
+}
+
+/* ---------- 이미지 · 크롭 ---------- */
+let exifSeg = null, img = null, psrc = null, pscale = 1, fileName = 'photo', previewData = null, rawData = null;
+const cv = $('#cv'), ctx = cv.getContext('2d', {willReadFrequently: true});
+function cropRect() {
+  const W = img.naturalWidth, H = img.naturalHeight;
+  const a = S.ratio === '32' ? (W >= H ? 1.5 : 2 / 3) : W / H;
+  let cw = W, ch = W / a; if (ch > H) { ch = H; cw = H * a; }
+  cw /= S.zoom; ch /= S.zoom;
+  const x = clamp(S.cx * W - cw / 2, 0, W - cw), y = clamp(S.cy * H - ch / 2, 0, H - ch);
+  S.cx = (x + cw / 2) / W; S.cy = (y + ch / 2) / H;
+  return {x, y, w: cw, h: ch};
+}
+function layout() {
+  const c = cropRect(), st = $('#stage');
+  const maxW = st.clientWidth, maxH = st.clientHeight, a = c.w / c.h;
+  let dw = maxW, dh = dw / a; if (dh > maxH) { dh = maxH; dw = dh * a; }
+  const dpr = Math.min(2, devicePixelRatio || 1);
+  let iw = Math.round(dw * dpr), ih = Math.round(dh * dpr);
+  const lim = Math.min(1600, Math.max(c.w * pscale, 1) * 1.0);
+  if (Math.max(iw, ih) > lim) { const q = lim / Math.max(iw, ih); iw = Math.round(iw * q); ih = Math.round(ih * q); }
+  if (cv.width !== iw || cv.height !== ih) { cv.width = Math.max(1, iw); cv.height = Math.max(1, ih); }
+  cv.style.width = dw + 'px'; cv.style.height = dh + 'px';
+  const cb = $('#cmp'); cb.style.right = ((maxW - dw) / 2 + 10) + 'px'; cb.style.bottom = ((maxH - dh) / 2 + 10) + 'px';
+  return c;
+}
+function renderPreview() {
+  if (!img) return;
+  const c = layout();
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(psrc, c.x * pscale, c.y * pscale, c.w * pscale, c.h * pscale, 0, 0, cv.width, cv.height);
+  const id = ctx.getImageData(0, 0, cv.width, cv.height);
+  rawData = new ImageData(new Uint8ClampedArray(id.data), id.width, id.height);
+  applyLUT(id.data, getLUT());
+  finish(id.data, id.width, id.height, 420);
+  ctx.putImageData(id, 0, 0);
+  previewData = id;
+  updateOverlay(); updateSizeInfo();
+}
+let queued = false;
+function request() { if (queued) return; queued = true; requestAnimationFrame(() => { queued = false; renderPreview(); }); }
+
+function exportSize() {
+  const c = cropRect(); let w = c.w, h = c.h;
+  const MAX = 16e6; if (w * h > MAX) { const q = Math.sqrt(MAX / (w * h)); w *= q; h *= q; }
+  return {c, w: Math.round(w), h: Math.round(h)};
+}
+function updateSizeInfo() {
+  if (!img) return;
+  const {w, h} = exportSize();
+  $('#sizeInfo').textContent = `저장 크기 ${w.toLocaleString()} × ${h.toLocaleString()} (${Math.round(w * h / 1e5) / 10}백만 화소)`;
+}
+
+/* ---------- 초점 표시 ---------- */
+let hintTimer = 0, ringTimer = 0;
+function hint(t) { const e = $('#hint'); e.textContent = t; e.classList.add('on'); clearTimeout(hintTimer); hintTimer = setTimeout(() => e.classList.remove('on'), 1800); }
+function updateOverlay(flash) {
+  const ring = $('#ring'), dot = $('#dot'), show = img && tab === 'blur' && S.blur;
+  if (!show) { ring.classList.remove('on'); dot.classList.remove('on'); return; }
+  const st = $('#stage').getBoundingClientRect(), r = cv.getBoundingClientRect();
+  const ox = r.left - st.left, oy = r.top - st.top, m = Math.min(r.width, r.height);
+  const px = ox + S.fx * r.width, py = oy + S.fy * r.height;
+  dot.style.left = px + 'px'; dot.style.top = py + 'px'; dot.classList.add('on');
+  ring.classList.toggle('band', S.shape === 'band');
+  if (S.shape === 'band') {
+    const hh = S.size * .3 * m * 2;
+    Object.assign(ring.style, {left: ox + 'px', width: r.width + 'px', top: (py - hh / 2) + 'px', height: hh + 'px'});
+  } else {
+    const rw = S.size * .45 * m * 2;
+    Object.assign(ring.style, {left: (px - rw / 2) + 'px', width: rw + 'px', top: (py - rw * 1.25 / 2) + 'px', height: rw * 1.25 + 'px'});
+  }
+  ring.classList.add('on');
+  clearTimeout(ringTimer);
+  if (!flash) ringTimer = setTimeout(() => ring.classList.remove('on'), 1600);
+}
+
+/* ---------- UI 만들기 ---------- */
+let tab = 'color';
+for (const [box, list] of Object.entries(SLIDERS)) {
+  $('#' + box).innerHTML = list.map(([k, label, mn, mx, st]) =>
+    `<label class="row"><span>${label}</span><input type="range" id="s-${k}" min="${mn}" max="${mx}" step="${st}"><output id="o-${k}"></output></label>`).join('');
+}
+for (const [box, [key, opts]] of Object.entries(CHIPS)) {
+  $('#' + box).innerHTML = opts.map(([v, label]) => `<button class="chip" data-k="${key}" data-v="${v}">${label}</button>`).join('');
+}
+function syncUI() {
+  for (const list of Object.values(SLIDERS)) for (const [k, , , , , fmt] of list) { $('#s-' + k).value = S[k]; $('#o-' + k).textContent = fmt(+S[k]); }
+  document.querySelectorAll('.chip').forEach(b => b.setAttribute('aria-pressed', String(String(S[b.dataset.k]) === b.dataset.v)));
+  $('#blurOn').checked = S.blur; $('#glowOn').checked = S.glow;
+  $('#blurBox').classList.toggle('dim', !S.blur);
+}
+document.addEventListener('input', e => {
+  const t = e.target; if (!t.id || !t.id.startsWith('s-')) return;
+  const k = t.id.slice(2); S[k] = +t.value;
+  const row = Object.values(SLIDERS).flat().find(r => r[0] === k); $('#o-' + k).textContent = row[5](S[k]);
+  remember(); request();
+  if (k === 'size') updateOverlay(true);
+});
+document.addEventListener('change', e => { if (e.target.id && e.target.id.startsWith('s-') && e.target.id === 's-size') updateOverlay(); });
+document.addEventListener('click', e => {
+  const b = e.target.closest('.chip'); if (!b) return;
+  const k = b.dataset.k, v = b.dataset.v;
+  S[k] = (k === 'zoom') ? +v : v;
+  if (k === 'zoom' || k === 'ratio') { S.cx = .5; S.cy = .5; }
+  syncUI(); remember(); request();
+  if (k === 'zoom' && +v > 1) hint('사진을 끌어서 위치를 옮길 수 있어요');
+});
+$('#blurOn').addEventListener('change', e => { S.blur = e.target.checked; syncUI(); request(); if (S.blur) hint('사진을 눌러 초점 위치를 정하세요'); });
+$('#glowOn').addEventListener('change', e => { S.glow = e.target.checked; remember(); request(); });
+document.addEventListener('dblclick', e => {
+  const row = e.target.closest('.row'); if (!row) return;
+  const inp = row.querySelector('input[type=range]'), k = inp.id.slice(2);
+  S[k] = DEF[k]; syncUI(); remember(); request();
+});
+$('#resetColor').addEventListener('click', () => { Object.assign(S, {preset: 'standard', mix: 1, ev: 0, warm: 0, con: 0, sat: 0}); syncUI(); remember(); request(); });
+document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
+  tab = t.dataset.tab;
+  document.querySelectorAll('.tab').forEach(x => x.setAttribute('aria-selected', String(x === t)));
+  document.querySelectorAll('.panel').forEach(p => p.classList.toggle('on', p.id === 'p-' + tab));
+  updateOverlay();
+}));
+
+/* ---------- 촬영 정보(EXIF) 유지 ---------- */
+function readExif(u) {
+  if (u[0] !== 0xFF || u[1] !== 0xD8) return null;
+  let p = 2;
+  while (p + 4 < u.length && u[p] === 0xFF) {
+    const mk = u[p + 1], len = (u[p + 2] << 8) | u[p + 3];
+    if (mk === 0xDA) break;
+    if (mk === 0xE1 && u[p + 4] === 0x45 && u[p + 5] === 0x78 && u[p + 6] === 0x69 && u[p + 7] === 0x66) {
+      const seg = u.slice(p, p + 2 + len), t = 10, le = seg[t] === 0x49;
+      const r16 = o => le ? seg[o] | (seg[o + 1] << 8) : (seg[o] << 8) | seg[o + 1];
+      const r32 = o => le ? (seg[o] | (seg[o + 1] << 8) | (seg[o + 2] << 16) | (seg[o + 3] << 24)) >>> 0 : ((seg[o] << 24) | (seg[o + 1] << 16) | (seg[o + 2] << 8) | seg[o + 3]) >>> 0;
+      const ifd = t + r32(t + 4), n = r16(ifd);
+      for (let k = 0; k < n; k++) {
+        const e = ifd + 2 + k * 12;
+        if (r16(e) === 0x0112) { if (le) { seg[e + 8] = 1; seg[e + 9] = 0; } else { seg[e + 8] = 0; seg[e + 9] = 1; } }
+      }
+      return seg;
+    }
+    p += 2 + len;
+  }
+  return null;
+}
+async function withExif(blob) {
+  if (!exifSeg) return blob;
+  const u = new Uint8Array(await blob.arrayBuffer());
+  let p = 2; if (u[2] === 0xFF && u[3] === 0xE0) p = 4 + ((u[4] << 8) | u[5]);
+  return new Blob([u.subarray(0, 2), exifSeg, u.subarray(p)], {type: 'image/jpeg'});
+}
+
+/* ---------- 사진 불러오기 ---------- */
+const fileInput = $('#file');
+$('#pickBtn').addEventListener('click', () => fileInput.click());
+$('#newBtn').addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', async () => {
+  const f = fileInput.files && fileInput.files[0]; if (!f) return;
+  const url = URL.createObjectURL(f), im = new Image();
+  im.src = url;
+  try { await im.decode(); } catch (e) { toast('이 사진 형식은 열 수 없어요. JPG로 바꿔서 올려 주세요.'); URL.revokeObjectURL(url); return; }
+  img = im; fileName = (f.name || 'photo').replace(/\.[^.]+$/, '');
+  exifSeg = null; try { exifSeg = readExif(new Uint8Array(await f.arrayBuffer())); } catch (e) { exifSeg = null; }
+  const W = im.naturalWidth, H = im.naturalHeight, q = Math.min(1, 2048 / Math.max(W, H));
+  psrc = document.createElement('canvas'); psrc.width = Math.round(W * q); psrc.height = Math.round(H * q);
+  const pc = psrc.getContext('2d'); pc.imageSmoothingQuality = 'high'; pc.drawImage(im, 0, 0, psrc.width, psrc.height);
+  pscale = psrc.width / W;
+  Object.assign(S, {cx: .5, cy: .5, fx: .5, fy: .45, blur: false});
+  $('#empty').hidden = true; cv.hidden = false; $('#cmp').hidden = false; $('#newBtn').hidden = false; $('#saveBtn').disabled = false;
+  syncUI(); renderPreview(); fileInput.value = '';
+});
+
+/* ---------- 손가락: 크롭 이동 · 초점 ---------- */
+let drag = null;
+cv.addEventListener('pointerdown', e => {
+  if (!img) return;
+  const r = cv.getBoundingClientRect();
+  if (tab === 'crop' && S.zoom > 1) drag = {mode: 'pan', x: e.clientX, y: e.clientY, cx: S.cx, cy: S.cy, rw: r.width, rh: r.height};
+  else if (tab === 'blur') { drag = {mode: 'focus'}; setFocus(e, r); }
+  else return;
+  cv.setPointerCapture(e.pointerId); e.preventDefault();
+});
+cv.addEventListener('pointermove', e => {
+  if (!drag) return;
+  if (drag.mode === 'pan') {
+    const c = cropRect(), W = img.naturalWidth, H = img.naturalHeight;
+    S.cx = drag.cx - (e.clientX - drag.x) / drag.rw * c.w / W;
+    S.cy = drag.cy - (e.clientY - drag.y) / drag.rh * c.h / H;
+    request();
+  } else setFocus(e, cv.getBoundingClientRect());
+});
+const endDrag = () => { if (drag && drag.mode === 'focus') updateOverlay(); drag = null; };
+cv.addEventListener('pointerup', endDrag); cv.addEventListener('pointercancel', endDrag);
+function setFocus(e, r) {
+  S.fx = clamp((e.clientX - r.left) / r.width, 0, 1); S.fy = clamp((e.clientY - r.top) / r.height, 0, 1);
+  if (!S.blur) { S.blur = true; syncUI(); }
+  request(); requestAnimationFrame(() => updateOverlay(true));
+}
+addEventListener('resize', () => img && request());
+
+/* ---------- 원본 비교 ---------- */
+const cmp = $('#cmp');
+const showRaw = e => { e.preventDefault(); if (rawData && rawData.width === cv.width) ctx.putImageData(rawData, 0, 0); };
+const showFx = () => { if (previewData && previewData.width === cv.width) ctx.putImageData(previewData, 0, 0); };
+cmp.addEventListener('pointerdown', showRaw);
+['pointerup', 'pointerleave', 'pointercancel'].forEach(t => cmp.addEventListener(t, showFx));
+cmp.addEventListener('contextmenu', e => e.preventDefault());
+
+/* ---------- 저장 ---------- */
+let DL = null, outBlob = null, outURL = '';
+(async () => { try { if (window.claude && window.claude.use) DL = await window.claude.use('downloads'); } catch (e) { DL = null; } })();
+let toastTimer = 0;
+function toast(t) { const e = $('#toast'); e.textContent = t; e.classList.add('on'); clearTimeout(toastTimer); toastTimer = setTimeout(() => e.classList.remove('on'), 2600); }
+$('#saveBtn').addEventListener('click', () => {
+  if (!img) return;
+  $('#busy').classList.add('on');
+  setTimeout(() => {
+    try {
+      const {c, w, h} = exportSize();
+      const oc = document.createElement('canvas'); oc.width = w; oc.height = h;
+      const ox = oc.getContext('2d', {willReadFrequently: true}); ox.imageSmoothingQuality = 'high';
+      ox.drawImage(img, c.x, c.y, c.w, c.h, 0, 0, w, h);
+      const id = ox.getImageData(0, 0, w, h);
+      applyLUT(id.data, getLUT()); finish(id.data, w, h, 900);
+      ox.putImageData(id, 0, 0);
+      oc.toBlob(async b0 => {
+        let b = b0; try { if (b) b = await withExif(b); } catch (e) { b = b0; }
+        $('#busy').classList.remove('on');
+        if (!b) { toast('사진이 너무 커서 만들지 못했어요. 비율이나 화각을 바꿔 보세요.'); return; }
+        outBlob = b; if (outURL) URL.revokeObjectURL(outURL); outURL = URL.createObjectURL(b);
+        $('#outImg').src = outURL;
+        $('#outMeta').textContent = `${w.toLocaleString()} × ${h.toLocaleString()} · ${(b.size / 1048576).toFixed(1)}MB · JPG`;
+        $('#sheetVeil').classList.add('on');
+        oc.width = oc.height = 1;
+      }, 'image/jpeg', .94);
+    } catch (e) { $('#busy').classList.remove('on'); toast('저장용 사진을 만들지 못했어요.'); }
+  }, 40);
+});
+$('#closeSheet').addEventListener('click', () => $('#sheetVeil').classList.remove('on'));
+$('#doSave').addEventListener('click', async () => {
+  if (!outBlob) return;
+  const name = fileName + '_50mm.jpg';
+  if (DL) {
+    try { await DL.save({filename: name, data: outBlob}); toast('저장했어요'); return; }
+    catch (e) { if (e && e.code === 'declined') return; if (e && e.code === 'rate_limited') { toast('잠시 후 다시 눌러 주세요'); return; } }
+  }
+  try {
+    const file = new File([outBlob], name, {type: 'image/jpeg'});
+    if (navigator.canShare && navigator.canShare({files: [file]})) { await navigator.share({files: [file]}); return; }
+  } catch (e) { if (e && e.name === 'AbortError') return; }
+  try { const a = document.createElement('a'); a.href = outURL; a.download = name; document.body.appendChild(a); a.click(); a.remove(); toast('다운로드를 시작했어요. 안 되면 사진을 길게 눌러 주세요.'); }
+  catch (e) { toast('위 사진을 길게 눌러 저장해 주세요'); }
+});
+
+syncUI();
+}
+</script>
+</body>
+</html>
